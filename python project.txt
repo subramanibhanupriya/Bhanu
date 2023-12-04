@@ -1,0 +1,75 @@
+import os
+import shutil
+import random
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.models import Model
+from keras.layers import Input, LSTM, Dense, Embedding, Dropout, Flatten, Concatenate
+from keras.callbacks import ModelCheckpoint
+from keras.optimizers import Adam
+import numpy as np
+
+def read_file(file_path):
+    with open(file_path, 'r') as f:
+        text = f.read()
+    return text
+
+def read_all_files(directory):
+    text = ""
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.txt'):
+                file_path = os.path.join(root, file)
+                text += read_file(file_path)
+    return text
+
+def prepare_text(text):
+    lines = text.split('\n')
+    random.shuffle(lines)
+    lines = lines[:10000]
+    return ' '.join(lines)
+
+def preprocess_text(text):
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts([text])
+    sequences = tokenizer.texts_to_sequences([text])[0]
+    return sequences, tokenizer
+
+def generate_audio(sequences, tokenizer, model):
+    index = 0
+    generated_text = ""
+    while index != len(sequences) - 1:
+        sampled = np.zeros((1, 1, len(sequences[index])))
+        sampled[0, 0, sequences[index]] = 1.
+        predicted = model.predict(sampled, verbose=0)[0]
+        predicted = np.asarray(predicted).astype('float64')
+        prob = predicted
+        index = np.argmax(prob)
+        if index == 0:
+            break
+        generated_text += tokenizer.sequences_to_texts([[index]])[0] + ' '
+    return generated_text
+
+text = read_all_files('texts')
+text = prepare_text(text)
+
+sequences, tokenizer = preprocess_text(text)
+sequences = pad_sequences(sequences, maxlen=50)
+
+model = Sequential()
+model.add(Embedding(len(sequences[0]), 256, input_length=len(sequences[0])))
+model.add(LSTM(512, return_sequences=True))
+model.add(Dropout(0.2))
+model.add(LSTM(512))
+model.add(Dropout(0.2))
+model.add(Dense(len(sequences[0]), activation='softmax'))
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+model.fit(sequences, sequences, epochs=50, batch_size=64)
+
+audio = generate_audio(sequences, tokenizer, model)
+
+print(audio)
+accuracy=accuracy_audio
+print(accuracy*100)
